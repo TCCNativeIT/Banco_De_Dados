@@ -1,6 +1,10 @@
+---------------------------------------------------------------------------------- criando o banco de dados ----------------------------------------------------------------------------------------------------------------
 CREATE DATABASE db_Barbearia;
 USE db_Barbearia;
+---------------------------------------------------------------------------------- banco de dados criado ----------------------------------------------------------------------------------------------------------------
 
+
+---------------------------------------------------------------------------------- criando tabelas ----------------------------------------------------------------------------------------------------------------
 CREATE TABLE tbl_Categoria (
     id_categoria INT PRIMARY KEY AUTO_INCREMENT,
     nm_categoria VARCHAR(80) NOT NULL
@@ -10,6 +14,7 @@ CREATE TABLE tbl_Produto (
     id_produto INT PRIMARY KEY AUTO_INCREMENT,
     id_categoria INT,
     nm_produto VARCHAR(80) NOT NULL,
+    qte_estoque int, 
     descricao VARCHAR(100),
     vl_preco decimal(6,2),
     FOREIGN KEY (id_categoria) REFERENCES tbl_Categoria(id_categoria)
@@ -45,6 +50,26 @@ CREATE TABLE tbl_Agendamento (
     FOREIGN KEY (id_funcionario) REFERENCES tbl_Funcionario(id_funcionario),
     FOREIGN KEY (id_cliente) REFERENCES tbl_Cliente(id_cliente)
 );
+
+create table tbl_Venda(
+	id_venda int primary key auto_increment,
+	id_cli int,
+	vl_total decimal(10,2),
+	foreign key(id_cli) references tbl_Cliente(id_cliente)
+);
+
+create table tbl_itensVenda(
+	id_itensVenda int primary key auto_increment,
+	id_venda int not null,
+	id_produto int not null,
+	qtde_vendida int,
+	vl_venda decimal(10,2),
+	foreign key(id_venda) references tbl_Venda(id_venda),
+	foreign key(id_produto) references tbl_Produto(id_produto)
+);
+---------------------------------------------------------------------------------- tabelas criadas com sucesso ----------------------------------------------------------------------------------------------------------------
+
+
 
 ---------------------------------------------------------------------------------- procedure para inserir clientes ----------------------------------------------------------------------------------------------------------------- 
 drop procedure if exists InserirCliente;
@@ -147,6 +172,7 @@ create procedure InserirProduto(
 	in p_id_categoria int,
     in p_nm_produto varchar(80),
     in p_descrição varchar(100),
+    in p_qte_estoque int,
     in p_vl_preco decimal(6,2)
 )
 begin 
@@ -154,8 +180,8 @@ begin
 	declare continue handler for sqlexception set erro_SQL = true;
     
     start transaction;
-		insert into tbl_produto (id_categoria, nm_produto, descricao, vl_preco)
-			values (p_id_categoria, p_nm_produto, p_descrição, p_vl_preco);
+		insert into tbl_produto (id_categoria, nm_produto, descricao, qte_estoque, vl_preco)
+			values (p_id_categoria, p_nm_produto, p_descrição, p_qte_estoque, p_vl_preco);
             
 	if(erro_SQL = false) then 
 			commit;
@@ -167,7 +193,7 @@ begin
 end $$
 delimiter ;
 
-call InserirProduto (1, 'Corte Americano', 'Corte bonito e simples', '50,00');
+call InserirProduto (1, 'Corte Americano', 'Corte bonito e simples', '80', '50.00');
 
 select * from tbl_produto;
 ---------------------------------------------------------------------------------- fim da procedure para inserir produtos ----------------------------------------------------------------------------------------------------------------
@@ -236,3 +262,83 @@ call Agendameto (1, 1, '2023/1/1' , 'Corte de cabelo');
 
 select * from tbl_Agendamento;
 ---------------------------------------------------------------------------------- fim da procedure agendamento ----------------------------------------------------------------------------------------------------------------
+
+
+---------------------------------------------------------------------------------- procedure para inserir venda ----------------------------------------------------------------------------------------------------------------
+drop procedure if exists InserirVenda;
+delimiter $$ 
+create procedure InserirVenda (
+	in p_id_cliente int, 
+    in p_vl_total decimal(10,2)
+)
+begin 
+	declare erro_SQL tinyint default false;
+	declare continue handler for sqlexception set erro_SQL = true;
+    
+    start transaction; 
+		insert into tbl_Venda (id_cli, vl_total)
+			values (p_id_cliente, p_vl_total);
+	
+    if(erro_SQL = false) then 
+			commit;
+				select 'Operação executada com sucesso !!';
+	else 
+			rollback;
+				select 'Ocorreu algum erro ao enviar os registros!';
+	end if;
+end $$
+delimiter ;
+
+call InserirVenda (1, '50.00');
+
+select * from tbl_Venda;
+---------------------------------------------------------------------------------- fim da procedure InserirVenda ----------------------------------------------------------------------------------------------------------------
+
+
+---------------------------------------------------------------------------------- procedure para inserir intens da venda ----------------------------------------------------------------------------------------------------------------
+drop procedure if exists InserirItens;
+delimiter $$
+create procedure InserirItens(
+	in p_id_venda int,
+    in p_id_produto int,
+    in p_qtde_vendida int,
+    in p_vl_venda decimal(10,2)
+)
+begin 
+	declare erro_SQL tinyint default false;
+	declare continue handler for sqlexception set erro_SQL = true;
+    
+	start transaction;
+		insert into tbl_itensVenda (id_venda, id_produto, qtde_vendida, vl_venda)
+			values (p_id_venda, p_id_produto, p_qtde_vendida, p_vl_venda);
+            
+	if(erro_SQL = false) then 
+			commit;
+				select 'Operação executada com sucesso !!';
+	else 
+			rollback;
+				select 'Ocorreu algum erro ao enviar os registros!';
+	end if;
+end $$
+delimiter ;
+
+call InserirItens (1, 1, '45', '50.00' );
+
+select * from tbl_itensVenda;
+---------------------------------------------------------------------------------- fim procedure InserirItens ----------------------------------------------------------------------------------------------------------------
+
+
+---------------------------------------------------------------------------------- trigger para dar baixa no estoque ----------------------------------------------------------------------------------------------------------------
+
+drop trigger if exists tgi_BaixaProd;
+delimiter $$
+create trigger tgi_BaixaProd after insert 
+	on tbl_itensVenda for each row 
+begin 
+	update tbl_Produto set qte_estoque = (qte_estoque - new.qtde_vendida)
+		where id_produto = new.id_produto;
+end $$
+delimiter ; 
+
+select * from tbl_produto;
+---------------------------------------------------------------------------------- fim trigger ----------------------------------------------------------------------------------------------------------------
